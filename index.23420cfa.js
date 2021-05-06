@@ -446,6 +446,7 @@ require('ol/ol.css');
 var _ol = require('ol');
 var _olGeom = require('ol/geom');
 var _olFormat = require('ol/format');
+require('ol/tilegrid');
 var _olSourceVectorTile = require('ol/source/VectorTile');
 var _parcelHelpers = require("@parcel/transformer-js/lib/esmodule-helpers.js");
 var _olSourceVectorTileDefault = _parcelHelpers.interopDefault(_olSourceVectorTile);
@@ -477,7 +478,8 @@ const waterWayStyle = (f, r) => {
       lineCap: 'square',
       // because of tile boundaries
       lineJoin: 'bevel'
-    })
+    }),
+    text: getText(f.get('name'))
   })];
   for (let i = 2; i < f.getGeometry().flatCoordinates_.length; i += 2) {
     var dx = f.getGeometry().flatCoordinates_[i] - f.getGeometry().flatCoordinates_[i - 2];
@@ -501,10 +503,11 @@ const waterWayStyle = (f, r) => {
 const elevationLayer = new _olLayer.VectorTile({
   declutter: true,
   // renderMode: 'image',
-  minZoom: 10,
-  // exclusive
+  // minZoom: 10, // exclusive
   source: new _olSourceVectorTileDefault.default({
-    minZoom: 10,
+    // minZoom: 10,
+    maxResolution: 2 * 78271.51696402048,
+    tileSize: [256, 256],
     attributions: '© <a href="https://www.mapbox.com/map-feedback/">Mapbox</a> ' + '© <a href="https://www.openstreetmap.org/copyright">' + 'OpenStreetMap contributors</a>',
     format: new _olFormat.MVT(),
     url: 'https://{a-d}.tiles.mapbox.com/v4/mapbox.mapbox-terrain-v2/{z}/{x}/{y}.vector.pbf?access_token=' + key
@@ -516,15 +519,15 @@ const roadStyles = {
     width: 6
   },
   trunk: {
-    color: '#f00',
+    color: '#ff0',
     width: 4
   },
   primary: {
-    color: '#600',
+    color: '#f00',
     width: 3
   },
   secondary: {
-    color: '#300',
+    color: '#800',
     width: 2
   },
   tertiary: {
@@ -578,17 +581,21 @@ const roadStyles = {
     dash: [6, 6]
   }
 };
-const setMapboxStyles = r => {
-  console.log(r);
-};
+// const setMapboxStyles = (r) => {
+// console.log(r);
+// }
 const roadStyle = (f, r) => {
   const style = roadStyles[f.get('class')];
   const dash = f.get('structure') === 'tunnel' ? [style.width * 10, style.width * 20] : style.dash;
   // TODO check 'structure' for bridge/ford?
+  // TODO use 'surface' ('paved' or 'unpaved')
+  // mapbox bike_line works better...
+  const color = f.get('bicycle') === undefined ? style.color : f.get('bicycle') === 'no' ? 'white' : 'black';
   return new _olStyle.Style({
     stroke: new _olStyle.Stroke({
       width: style.width * 10 / r,
-      color: (f.get('bike_lane') in ['yes', 'both']) ? 'black' : style.color,
+      color: color,
+      // mapbox:(f.get('bike_lane') in ['yes', 'both']) ? 'black' : style.color,
       lineDash: dash === undefined ? [] : dash.map(l => l * 10 / r),
       lineCap: 'butt',
       lineJoin: 'round'
@@ -613,6 +620,23 @@ const landuseStyles = {
   scrub: fillStyle('#0a06'),
   wood: fillStyle('#0206')
 };
+// default res is 0: 78271.51696402048 14: 4.777314267823516
+// console.log(openMapTiles.getTileGrid().getResolutions());
+// https://stackoverflow.com/questions/43538345/how-to-force-load-tiles-for-lower-resolution
+// const grid = createXYZ({
+// extent: extent,
+// maxResolution: 8*78271.51696402048,
+// maxZoom: 14,
+// minZoom: 0,
+// tileSize: [512, 512],
+// });
+const openMapTiles = new _olSourceVectorTileDefault.default({
+  attributions: 'OpenMapTiles by MapTiler',
+  format: new _olFormat.MVT(),
+  maxResolution: 8 * 78271.51696402048,
+  tileSize: [64, 64],
+  url: 'https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=qu62rKisigsebPda2e6b'
+});
 const map = new _ol.Map({
   target: 'map',
   layers: [elevationLayer, // new VectorTileLayer({
@@ -639,12 +663,7 @@ const map = new _ol.Map({
   // }),
   new _olLayer.VectorTile({
     zIndex: 100,
-    source: new _olSourceVectorTileDefault.default({
-      attributions: 'OpenMapTiles by MapTiler',
-      format: new _olFormat.MVT(),
-      maxZoom: 14,
-      url: 'https://api.maptiler.com/tiles/v3/{z}/{x}/{y}.pbf?key=qu62rKisigsebPda2e6b'
-    }),
+    source: openMapTiles,
     declutter: true,
     style: (f, r) => {
       // https://openmaptiles.org/schema/#fields
@@ -721,7 +740,7 @@ const setLevels = () => {
   const cumPropAreas = Object.values(areas).map(v => v / sum).map((sum => value => sum += value)(0));
   const eleColors = cumPropAreas.map(cum => 'hsl(' + (150 - 170 * cum + ', 100%, 92%)'));
   console.log(eles);
-  console.log(cumPropAreas);
+  // console.log(cumPropAreas);
   // const thresholdIndices = [0, .1, .2, .3, .4, .5, .6, .7, .8, .9].map(thr => cumPropAreas.findIndex((el) => el >= thr));
   // console.log(thresholdIndices.map(i => Object.keys(areas)[i]))
   const indexedMultiples = Math.max(100, 4 * intervals[zoom]);
@@ -756,7 +775,7 @@ map.once('rendercomplete', () => {
   elevationLayer.getSource().changed();
 });
 
-},{"ol/ol.css":"6KKsq","ol":"3OUuD","ol/geom":"36gxI","ol/format":"7yVrs","ol/source/VectorTile":"78HuP","ol/layer":"4ym9Z","ol/style":"1cf9J","ol/proj":"4Wdsb","ol/extent":"5PMSh","@parcel/transformer-js/lib/esmodule-helpers.js":"5gA8y"}],"6KKsq":[function() {},{}],"3OUuD":[function(require,module,exports) {
+},{"ol/ol.css":"6KKsq","ol":"3OUuD","ol/geom":"36gxI","ol/format":"7yVrs","ol/source/VectorTile":"78HuP","ol/layer":"4ym9Z","ol/style":"1cf9J","ol/proj":"4Wdsb","ol/extent":"5PMSh","@parcel/transformer-js/lib/esmodule-helpers.js":"5gA8y","ol/tilegrid":"1JyRQ"}],"6KKsq":[function() {},{}],"3OUuD":[function(require,module,exports) {
 var _parcelHelpers = require("@parcel/transformer-js/lib/esmodule-helpers.js");
 _parcelHelpers.defineInteropFlag(exports);
 _parcelHelpers.export(exports, "AssertionError", function () {
